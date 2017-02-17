@@ -48,7 +48,7 @@ def max_pool_2x2(x):
                             strides=[1, 2, 2, 1], padding='SAME')
 
 def conv2d_transpose(x, W, out_shape):
-    return tf.nn.conv2d_transpose(x, W, strides=[1, 1, 1, 1], 
+    return tf.nn.conv2d_transpose(x, W, strides=[1, 1, 1, 1],
                                     padding='SAME', output_shape=out_shape)
 
 def unpool_2x2(x):
@@ -57,8 +57,8 @@ def unpool_2x2(x):
 
 with tf.Graph().as_default():
 
-    train_iterations = 50000
-    batch_size = 1
+    train_iterations = 500000
+    batch_size = 5
 
     x = tf.placeholder(tf.float32, shape=[None, 784])
 
@@ -88,12 +88,12 @@ with tf.Graph().as_default():
     h_fc1 = tf.nn.relu(tf.matmul(h_pool2_flat, W_fc1) + b_fc1, name="fc1")
     print h_fc1
 
-    W_fc2 = weight_variable([1024, 64])
-    b_fc2 = bias_variable([64])
+    W_fc2 = weight_variable([1024, 512])
+    b_fc2 = bias_variable([512])
     h_fc2 = tf.nn.relu(tf.matmul(h_fc1, W_fc2) + b_fc2, name="fc2") # center representation
     print h_fc2
 
-    W_fc3 = weight_variable([64, 7 * 7 * 64])
+    W_fc3 = weight_variable([512, 7 * 7 * 64])
     b_fc3 = bias_variable([7 * 7 * 64])
     h_fc3 = tf.nn.relu(tf.matmul(h_fc2, W_fc3) + b_fc3, name="fc3")
     print h_fc3
@@ -107,17 +107,17 @@ with tf.Graph().as_default():
     b_dconv1 = bias_variable([32])
     osize_dconv1 = h_pool1.get_shape().as_list()
     osize_dconv1[0] = batch_size
-    h_dconv1 = tf.nn.relu(conv2d_transpose(h_unpool1, W_dconv1, osize_dconv1) 
+    h_dconv1 = tf.nn.relu(conv2d_transpose(h_unpool1, W_dconv1, osize_dconv1)
                         + b_dconv1, name="dconv1")
     print h_dconv1
-    
+
     h_unpool2 = unpool_2x2(h_dconv1) # 28x28
     print h_unpool2
     W_dconv2 = weight_variable([5, 5, 1, 32])
     b_dconv2 = bias_variable([1])
     osize_dconv2 = x_image.get_shape().as_list()
     osize_dconv2[0] = batch_size
-    h_dconv2 = tf.nn.relu(conv2d_transpose(h_unpool2, W_dconv2, osize_dconv2) 
+    h_dconv2 = tf.nn.relu(conv2d_transpose(h_unpool2, W_dconv2, osize_dconv2)
                         + b_dconv2, name="dconv2")
     print h_dconv2
 
