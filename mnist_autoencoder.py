@@ -88,12 +88,12 @@ with tf.Graph().as_default():
     h_fc1 = tf.nn.relu(tf.matmul(h_pool2_flat, W_fc1) + b_fc1, name="fc1")
     print h_fc1
 
-    W_fc2 = weight_variable([1024, 1024])
-    b_fc2 = bias_variable([1024])
+    W_fc2 = weight_variable([1024, 64])
+    b_fc2 = bias_variable([64])
     h_fc2 = tf.nn.relu(tf.matmul(h_fc1, W_fc2) + b_fc2, name="fc2") # center representation
     print h_fc2
 
-    W_fc3 = weight_variable([1024, 7 * 7 * 64])
+    W_fc3 = weight_variable([64, 7 * 7 * 64])
     b_fc3 = bias_variable([7 * 7 * 64])
     h_fc3 = tf.nn.relu(tf.matmul(h_fc2, W_fc3) + b_fc3, name="fc3")
     print h_fc3
@@ -139,10 +139,10 @@ with tf.Graph().as_default():
         coord = tf.train.Coordinator()
         threads = tf.train.start_queue_runners(coord=coord)
 
-        cv2.namedWindow("Real Image", cv2.WINDOW_NORMAL)
-        cv2.resizeWindow("Real Image", 200, 200)
-        cv2.namedWindow("CNN Image", cv2.WINDOW_NORMAL)
-        cv2.resizeWindow("CNN Image", 200, 200)
+        # cv2.namedWindow("Real Image", cv2.WINDOW_NORMAL)
+        # cv2.resizeWindow("Real Image", 200, 200)
+        # cv2.namedWindow("CNN Image", cv2.WINDOW_NORMAL)
+        # cv2.resizeWindow("CNN Image", 200, 200)
 
         training_start_time = datetime.datetime.now()
         print "Starting, training for", train_iterations, "iterations"
@@ -152,14 +152,14 @@ with tf.Graph().as_default():
             # print len(batch), len(batch[0]), len(batch[1]), len(batch[0][0])
             # print batch[0]
 
-            if i % 100 == 0 or i == 1:
+            if i % 1000 == 0 or i == 1:
                 iloss, ix_image, iy_image = sess.run([loss, x_image, y_image], feed_dict={x:batch[0]})
                 print "step",i, "loss", iloss, "duration", datetime.datetime.now() - start_time
 
-                cv2.imshow("Real Image", ix_image[0])
-                key = cv2.waitKey(10)
-                cv2.imshow("CNN Image", iy_image[0])
-                key = cv2.waitKey(10)
+                # cv2.imshow("Real Image", ix_image[0])
+                # key = cv2.waitKey(10)
+                # cv2.imshow("CNN Image", iy_image[0])
+                # key = cv2.waitKey(10)
                 if i % 1000 == 0 or i == 1:
                     cv2.imwrite("saved_images/" + str(i) + "_real_im.tif", ix_image[0]*255)
                     cv2.imwrite("saved_images/" + str(i) + "_cnn_im.tif", iy_image[0]*255)
