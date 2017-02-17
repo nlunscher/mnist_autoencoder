@@ -1,0 +1,3 @@
+model_checkpoint_path: "mnist_auto_final.tfrecords"
+all_model_checkpoint_paths: "mnist_auto.tfrecords"
+all_model_checkpoint_paths: "mnist_auto_final.tfrecords"

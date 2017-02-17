@@ -57,54 +57,113 @@ def unpool_2x2(x):
 
 with tf.Graph().as_default():
 
-    train_iterations = 500000
-    batch_size = 5
+    train_iterations = 600000
+    batch_size = 10
 
     x = tf.placeholder(tf.float32, shape=[None, 784])
 
     ####### build the model - auto encoder #############################################
     print "=========================================================================="
+    # x_image = tf.reshape(x, [-1, 28, 28, 1]) # 28x28
+    # print x_image
+    #
+    # W_conv1 = weight_variable([5, 5, 1, 24])
+    # b_conv1 = bias_variable([24])
+    # h_conv1 = tf.nn.relu(conv2d(x_image, W_conv1) + b_conv1, name="conv1")
+    # print h_conv1
+    # h_pool1 = max_pool_2x2(h_conv1) # 14x14
+    # print h_pool1
+    #
+    # W_conv2 = weight_variable([5, 5, 24, 32])
+    # b_conv2 = bias_variable([32])
+    # h_conv2 = tf.nn.relu(conv2d(h_pool1, W_conv2) + b_conv2, name="conv2")
+    # print h_conv2
+    # h_pool2 = max_pool_2x2(h_conv2) # 7x7
+    # print h_pool2
+    #
+    # h_pool2_flat = tf.reshape(h_pool2, [-1, 7*7*32])
+    #
+    # W_fc1 = weight_variable([7 * 7 * 32, 512])
+    # b_fc1 = bias_variable([512])
+    # h_fc1 = tf.nn.relu(tf.matmul(h_pool2_flat, W_fc1) + b_fc1, name="fc1")
+    # print h_fc1
+    #
+    # W_fc2 = weight_variable([512, 128])
+    # b_fc2 = bias_variable([128])
+    # h_fc2 = tf.nn.relu(tf.matmul(h_fc1, W_fc2) + b_fc2, name="fc2") # center representation
+    # print h_fc2
+    #
+    # W_fc3 = weight_variable([128, 7 * 7 * 32])
+    # b_fc3 = bias_variable([7 * 7 * 32])
+    # h_fc3 = tf.nn.relu(tf.matmul(h_fc2, W_fc3) + b_fc3, name="fc3")
+    # print h_fc3
+    #
+    # h_fc3_2d = tf.reshape(h_fc3, [-1, 7, 7, 32]) # 7x7
+    # print h_fc3_2d
+    #
+    # h_unpool1 = unpool_2x2(h_fc3_2d) # 14x14
+    # print h_unpool1
+    # W_dconv1 = weight_variable([5, 5, 24, 32])
+    # b_dconv1 = bias_variable([24])
+    # osize_dconv1 = h_pool1.get_shape().as_list()
+    # osize_dconv1[0] = batch_size
+    # h_dconv1 = tf.nn.relu(conv2d_transpose(h_unpool1, W_dconv1, osize_dconv1)
+    #                     + b_dconv1, name="dconv1")
+    # print h_dconv1
+    #
+    # h_unpool2 = unpool_2x2(h_dconv1) # 28x28
+    # print h_unpool2
+    # W_dconv2 = weight_variable([5, 5, 1, 24])
+    # b_dconv2 = bias_variable([1])
+    # osize_dconv2 = x_image.get_shape().as_list()
+    # osize_dconv2[0] = batch_size
+    # h_dconv2 = tf.nn.sigmoid(conv2d_transpose(h_unpool2, W_dconv2, osize_dconv2)
+    #                     + b_dconv2, name="dconv2")
+    # print h_dconv2
+    #
+    # y_image = h_dconv2
+
     x_image = tf.reshape(x, [-1, 28, 28, 1]) # 28x28
     print x_image
 
-    W_conv1 = weight_variable([5, 5, 1, 24])
-    b_conv1 = bias_variable([24])
+    W_conv1 = weight_variable([5, 5, 1, 32])
+    b_conv1 = bias_variable([32])
     h_conv1 = tf.nn.relu(conv2d(x_image, W_conv1) + b_conv1, name="conv1")
     print h_conv1
     h_pool1 = max_pool_2x2(h_conv1) # 14x14
     print h_pool1
 
-    W_conv2 = weight_variable([5, 5, 24, 32])
-    b_conv2 = bias_variable([32])
+    W_conv2 = weight_variable([5, 5, 32, 64])
+    b_conv2 = bias_variable([64])
     h_conv2 = tf.nn.relu(conv2d(h_pool1, W_conv2) + b_conv2, name="conv2")
     print h_conv2
     h_pool2 = max_pool_2x2(h_conv2) # 7x7
     print h_pool2
 
-    h_pool2_flat = tf.reshape(h_pool2, [-1, 7*7*32])
+    h_pool2_flat = tf.reshape(h_pool2, [-1, 7*7*64])
 
-    W_fc1 = weight_variable([7 * 7 * 32, 512])
-    b_fc1 = bias_variable([512])
+    W_fc1 = weight_variable([7 * 7 * 64, 1024])
+    b_fc1 = bias_variable([1024])
     h_fc1 = tf.nn.relu(tf.matmul(h_pool2_flat, W_fc1) + b_fc1, name="fc1")
     print h_fc1
 
-    W_fc2 = weight_variable([512, 128])
+    W_fc2 = weight_variable([1024, 512])
     b_fc2 = bias_variable([128])
     h_fc2 = tf.nn.relu(tf.matmul(h_fc1, W_fc2) + b_fc2, name="fc2") # center representation
     print h_fc2
 
-    W_fc3 = weight_variable([128, 7 * 7 * 32])
-    b_fc3 = bias_variable([7 * 7 * 32])
+    W_fc3 = weight_variable([512, 7 * 7 * 64])
+    b_fc3 = bias_variable([7 * 7 * 64])
     h_fc3 = tf.nn.relu(tf.matmul(h_fc2, W_fc3) + b_fc3, name="fc3")
     print h_fc3
 
-    h_fc3_2d = tf.reshape(h_fc3, [-1, 7, 7, 32]) # 7x7
+    h_fc3_2d = tf.reshape(h_fc3, [-1, 7, 7, 64]) # 7x7
     print h_fc3_2d
 
     h_unpool1 = unpool_2x2(h_fc3_2d) # 14x14
     print h_unpool1
-    W_dconv1 = weight_variable([5, 5, 24, 32])
-    b_dconv1 = bias_variable([24])
+    W_dconv1 = weight_variable([5, 5, 24, 64])
+    b_dconv1 = bias_variable([32])
     osize_dconv1 = h_pool1.get_shape().as_list()
     osize_dconv1[0] = batch_size
     h_dconv1 = tf.nn.relu(conv2d_transpose(h_unpool1, W_dconv1, osize_dconv1)
@@ -113,7 +172,7 @@ with tf.Graph().as_default():
 
     h_unpool2 = unpool_2x2(h_dconv1) # 28x28
     print h_unpool2
-    W_dconv2 = weight_variable([5, 5, 1, 24])
+    W_dconv2 = weight_variable([5, 5, 1, 32])
     b_dconv2 = bias_variable([1])
     osize_dconv2 = x_image.get_shape().as_list()
     osize_dconv2[0] = batch_size
@@ -156,14 +215,13 @@ with tf.Graph().as_default():
                 iloss, ix_image, iy_image = sess.run([loss, x_image, y_image], feed_dict={x:batch[0]})
                 print "step",i, "loss", iloss, "duration", datetime.datetime.now() - start_time
 
-                print "Real Image", np.max(ix_image[0]), np.min(ix_image[0])
-                print "CNN Image", np.max(iy_image[0]), np.min(iy_image[0]) 
+                print "Real Image", np.max(ix_image[0]), np.min(ix_image[0]), "CNN Image", np.max(iy_image[0]), np.min(iy_image[0])
                 cv2.imshow("Real Image", ix_image[0])
                 key = cv2.waitKey(10)
                 cv2.imshow("CNN Image", iy_image[0])
                 key = cv2.waitKey(10)
-                
-                if i % 1000 == 0 or i == 1:
+
+                if i % 5000 == 0 or i == 1:
                     cv2.imwrite("saved_images/" + str(i) + "_real_im.tif", ix_image[0]*255)
                     cv2.imwrite("saved_images/" + str(i) + "_cnn_im.tif", iy_image[0]*255)
 
