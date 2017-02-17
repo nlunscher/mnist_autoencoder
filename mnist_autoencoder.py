@@ -12,6 +12,10 @@ import time
 from tensorflow.examples.tutorials.mnist import input_data
 mnist = input_data.read_data_sets('MNIST_data', one_hot=True)
 
+def write_to_csv(filename, number):
+    with open(filename, 'a') as f:
+        f.write(str(number) + ',\n')
+
 def weight_variable(shape):
     initial = tf.truncated_normal(shape, stddev=0.1)
     return tf.Variable(initial)
@@ -144,7 +148,9 @@ with tf.Graph().as_default():
             # else:
             #     print i
 
-            sess.run(train_step, feed_dict={x: batch[0]})
+            _, iloss = sess.run([train_step, loss], feed_dict={x: batch[0]})
+            to_csv = str(i) + ", " + str(iloss)
+            write_to_csv('training_losses.csv', to_csv)
 
         print "Total Duration:", datetime.datetime.now() - start_time
 
