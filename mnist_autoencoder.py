@@ -37,7 +37,8 @@ def unpool_2x2(x):
 
 with tf.Graph().as_default():
 
-    batch_size = 50
+    train_iterations = 50000
+    batch_size = 1
 
     x = tf.placeholder(tf.float32, shape=[None, 784])
 
@@ -116,33 +117,41 @@ with tf.Graph().as_default():
         coord = tf.train.Coordinator()
         threads = tf.train.start_queue_runners(coord=coord)
 
-        cv2.namedWindow("Images", cv2.WINDOW_NORMAL)
-        cv2.resizeWindow("Images", 400, 200)
+        cv2.namedWindow("Real Image", cv2.WINDOW_NORMAL)
+        cv2.resizeWindow("Real Image", 200, 200)
+        cv2.namedWindow("CNN Image", cv2.WINDOW_NORMAL)
+        cv2.resizeWindow("CNN Image", 200, 200)
 
         training_start_time = datetime.datetime.now()
-        train_iterations = 500
         print "Starting, training for", train_iterations, "iterations"
+        start_time = datetime.datetime.now()
         for i in range(1, train_iterations + 1):
             batch = mnist.train.next_batch(batch_size)
             # print len(batch), len(batch[0]), len(batch[1]), len(batch[0][0])
             # print batch[0]
 
-            if i % 10 == 0 or i == 1:
+            if i % 100 == 0 or i == 1:
                 iloss, ix_image, iy_image = sess.run([loss, x_image, y_image], feed_dict={x:batch[0]})
-                print("step %d, loss %g"%(i, iloss))
+                print "step",i, "loss", iloss, "duration", datetime.datetime.now() - start_time
 
-                sample_im = np.concatenate([ix_image[0], iy_image[0]], axis=1)
-                cv2.imshow("Images", sample_im)
-                key = cv2.waitKey(100)
-            else:
-                print i
+                cv2.imshow("Real Image", ix_image[0])
+                key = cv2.waitKey(10)
+                cv2.imshow("CNN Image", iy_image[0])
+                key = cv2.waitKey(10)
+                if i % 1000 == 0 or i == 1:
+                    cv2.imwrite("saved_images/" + str(i) + "_real_im.tif", ix_image[0]*255)
+                    cv2.imwrite("saved_images/" + str(i) + "_cnn_im.tif", iy_image[0]*255)
+            # else:
+            #     print i
 
-            train_step.run(feed_dict={x: batch[0]})
+            sess.run(train_step, feed_dict={x: batch[0]})
 
-        print "Testing"
+        print "Total Duration:", datetime.datetime.now() - start_time
+
+        # print "Testing"
         # print("test accuracy %g"%accuracy.eval(feed_dict={
         #       x: mnist.test.images, y_: mnist.test.labels, keep_prob: 1.0}))
-        # save_path = saver.save(sess, "mnist_auto.tfrecords")
+        save_path = saver.save(sess, "mnist_auto.tfrecords")
         print ("Saved model as: %s" % save_path)
 
 
