@@ -16,6 +16,22 @@ def write_to_csv(filename, number):
     with open(filename, 'a') as f:
         f.write(str(number) + ',\n')
 
+def show_num_parameters():
+    total_parameters = 0
+    for variable in tf.trainable_variables():
+        # shape is an array of tf.Dimension
+        shape = variable.get_shape()
+        # print(shape)
+        # print(len(shape))
+        variable_parametes = 1
+        for dim in shape:
+            # print(dim)
+            variable_parametes *= dim.value
+        # print(variable_parametes)
+        total_parameters += variable_parametes
+    print "Total trainable model parameters:", total_parameters
+    return total_parameters
+
 def weight_variable(shape):
     initial = tf.truncated_normal(shape, stddev=0.1)
     return tf.Variable(initial)
@@ -106,6 +122,8 @@ with tf.Graph().as_default():
     print h_dconv2
 
     y_image = h_dconv2
+
+    show_num_parameters()
 
     loss = tf.reduce_sum(tf.square(x_image - y_image))
     ########################################################################
