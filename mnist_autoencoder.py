@@ -121,10 +121,10 @@ with tf.Graph().as_default():
         coord = tf.train.Coordinator()
         threads = tf.train.start_queue_runners(coord=coord)
 
-        cv2.namedWindow("Real Image", cv2.WINDOW_NORMAL)
-        cv2.resizeWindow("Real Image", 200, 200)
-        cv2.namedWindow("CNN Image", cv2.WINDOW_NORMAL)
-        cv2.resizeWindow("CNN Image", 200, 200)
+        # cv2.namedWindow("Real Image", cv2.WINDOW_NORMAL)
+        # cv2.resizeWindow("Real Image", 200, 200)
+        # cv2.namedWindow("CNN Image", cv2.WINDOW_NORMAL)
+        # cv2.resizeWindow("CNN Image", 200, 200)
 
         training_start_time = datetime.datetime.now()
         print "Starting, training for", train_iterations, "iterations"
@@ -138,10 +138,10 @@ with tf.Graph().as_default():
                 iloss, ix_image, iy_image = sess.run([loss, x_image, y_image], feed_dict={x:batch[0]})
                 print "step",i, "loss", iloss, "duration", datetime.datetime.now() - start_time
 
-                cv2.imshow("Real Image", ix_image[0])
-                key = cv2.waitKey(10)
-                cv2.imshow("CNN Image", iy_image[0])
-                key = cv2.waitKey(10)
+                # cv2.imshow("Real Image", ix_image[0])
+                # key = cv2.waitKey(10)
+                # cv2.imshow("CNN Image", iy_image[0])
+                # key = cv2.waitKey(10)
                 if i % 1000 == 0 or i == 1:
                     cv2.imwrite("saved_images/" + str(i) + "_real_im.tif", ix_image[0]*255)
                     cv2.imwrite("saved_images/" + str(i) + "_cnn_im.tif", iy_image[0]*255)
