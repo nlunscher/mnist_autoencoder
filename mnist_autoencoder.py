@@ -148,7 +148,7 @@ with tf.Graph().as_default():
     print h_fc1
 
     W_fc2 = weight_variable([1024, 512])
-    b_fc2 = bias_variable([128])
+    b_fc2 = bias_variable([512])
     h_fc2 = tf.nn.relu(tf.matmul(h_fc1, W_fc2) + b_fc2, name="fc2") # center representation
     print h_fc2
 
@@ -162,7 +162,7 @@ with tf.Graph().as_default():
 
     h_unpool1 = unpool_2x2(h_fc3_2d) # 14x14
     print h_unpool1
-    W_dconv1 = weight_variable([5, 5, 24, 64])
+    W_dconv1 = weight_variable([5, 5, 32, 64])
     b_dconv1 = bias_variable([32])
     osize_dconv1 = h_pool1.get_shape().as_list()
     osize_dconv1[0] = batch_size
