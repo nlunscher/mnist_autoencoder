@@ -2,7 +2,6 @@ from tensorflow.examples.tutorials.mnist import input_data
 mnist = input_data.read_data_sets('MNIST_data', one_hot=True)
 
 import tensorflow as tf
-
 sess = tf.InteractiveSession()
 
 x = tf.placeholder(tf.float32, shape=[None, 784])
@@ -56,8 +55,6 @@ cross_entropy = tf.reduce_mean(
 train_step = tf.train.AdamOptimizer(1e-4).minimize(cross_entropy)
 correct_prediction = tf.equal(tf.argmax(y_conv,1), tf.argmax(y_,1))
 accuracy = tf.reduce_mean(tf.cast(correct_prediction, tf.float32))
-
-saver = tf.train.Saver(max_to_keep=10000)
 sess.run(tf.global_variables_initializer())
 for i in range(20000):
 	batch = mnist.train.next_batch(50)
@@ -66,10 +63,6 @@ for i in range(20000):
 			x:batch[0], y_: batch[1], keep_prob: 1.0})
 		print("step %d, training accuracy %g"%(i, train_accuracy))
 	train_step.run(feed_dict={x: batch[0], y_: batch[1], keep_prob: 0.5})
-
-save_folder = "4exp/"
-save_path = saver.save(sess, save_folder + "saved_models/" + str(i) + "_mnist_auto.tfrecords")
-print ("Saved model as: %s" % save_path)
 
 print("test accuracy %g"%accuracy.eval(feed_dict={
     x: mnist.test.images, y_: mnist.test.labels, keep_prob: 1.0}))
