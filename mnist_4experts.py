@@ -68,7 +68,7 @@ for i in range(20000):
 	train_step.run(feed_dict={x: batch[0], y_: batch[1], keep_prob: 0.5})
 
 save_folder = "4exp/"
-save_path = saver.save(sess, save_folder + "saved_models/" + str(i) + "_mnist_auto.tfrecords")
+save_path = saver.save(sess, save_folder + "saved_models/mnist_4experts.tfrecords")
 print ("Saved model as: %s" % save_path)
 
 print("test accuracy %g"%accuracy.eval(feed_dict={
