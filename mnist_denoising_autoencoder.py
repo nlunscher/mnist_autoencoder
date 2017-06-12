@@ -58,7 +58,7 @@ def unpool_2x2(x):
 with tf.Graph().as_default():
 
     train_iterations = 600000
-    batch_size = 32
+    batch_size = 128
 
     x = tf.placeholder(tf.float32, shape=[None, 784])
 
@@ -66,7 +66,7 @@ with tf.Graph().as_default():
     print "=========================================================================="
     x_image = tf.reshape(x, [-1, 28, 28, 1]) # 28x28
     print x_image
-    noise = tf.truncated_normal(shape=tf.shape(x_image), stddev=0.1)
+    noise = tf.truncated_normal(shape=tf.shape(x_image), stddev=0.25)
     x_noise = x_image + noise
 
     W_conv1 = weight_variable([5, 5, 1, 32])
@@ -130,8 +130,9 @@ with tf.Graph().as_default():
     loss = tf.reduce_mean(tf.reduce_sum(tf.abs(x_image - y_image), 3))
     ########################################################################
 
-    train_step = tf.train.AdamOptimizer(1e-6).minimize(loss)
+    train_step = tf.train.AdamOptimizer(1e-5).minimize(loss)
 
+    save_folder = "dae_saved/"
 
     saver = tf.train.Saver(max_to_keep=10000)
     with tf.Session() as sess:
@@ -141,10 +142,6 @@ with tf.Graph().as_default():
         coord = tf.train.Coordinator()
         threads = tf.train.start_queue_runners(coord=coord)
 
-        # cv2.namedWindow("Real Image", cv2.WINDOW_NORMAL)
-        # cv2.resizeWindow("Real Image", 200, 200)
-        # cv2.namedWindow("CNN Image", cv2.WINDOW_NORMAL)
-        # cv2.resizeWindow("CNN Image", 200, 200)
         cv2.namedWindow("Image", cv2.WINDOW_NORMAL)
         cv2.resizeWindow("Image", 200*3, 200)
 
@@ -153,29 +150,26 @@ with tf.Graph().as_default():
         start_time = datetime.datetime.now()
         for i in range(1, train_iterations + 1):
             batch = mnist.train.next_batch(batch_size)
-            # print len(batch), len(batch[0]), len(batch[1]), len(batch[0][0])
-            # print batch[0]
 
-            if i % 10 == 0 or i == 1:
+            if i % 100 == 0 or i == 1:
                 iloss, ix_image,ix_noise, iy_image = sess.run([loss, x_image, x_noise, y_image], feed_dict={x:batch[0]})
                 print "step",i, "loss", iloss, "duration", datetime.datetime.now() - start_time
 
                 print "Real Image", np.max(ix_image[0]), np.min(ix_image[0]), "CNN Image", np.max(iy_image[0]), np.min(iy_image[0])
                 show_im = np.concatenate([ix_image[0], ix_noise[0], iy_image[0]], axis=1)
-                # cv2.imshow("Real Image", ix_image[0])
-                # key = cv2.waitKey(10)
-                # cv2.imshow("Noisey Image", ix_noise[0])
-                # key = cv2.waitKey(10)
-                # cv2.imshow("CNN Image", iy_image[0])
                 cv2.imshow("Image", show_im)
                 key = cv2.waitKey(10)
 
                 if i % 5000 == 0 or i == 1:
-                    cv2.imwrite("da_saved/saved_images/" + str(i) + "_real_im.tif", ix_image[0]*255)
-                    cv2.imwrite("da_saved/saved_images/" + str(i) + "_cnn_im.tif", iy_image[0]*255)
+                    im_name = save_folder + "saved_images/" + str(i) + "_train_im.tif"
+                    show_im[np.where(show_im > 1)] = 1
+                    show_im[np.where(show_im < 0.0)] = 0
+                    saved = cv2.imwrite(im_name, (show_im*255).astype(np.uint8))
+                    print "Saving Images", im_name, saved
 
             if i % 100000 == 0:
-                save_path = saver.save(sess, "da_saved/saved_models/mnist_auto.tfrecords")
+                print "Saving Model"
+                save_path = saver.save(sess, save_folder + "saved_models/" + str(i) + "_mnist_auto.tfrecords")
                 print ("Saved model as: %s" % save_path)
             # else:
             #     print i
@@ -189,7 +183,7 @@ with tf.Graph().as_default():
         # print "Testing"
         # print("test accuracy %g"%accuracy.eval(feed_dict={
         #       x: mnist.test.images, y_: mnist.test.labels, keep_prob: 1.0}))
-        save_path = saver.save(sess, "da_saved/saved_models/mnist_auto_final.tfrecords")
+        save_path = saver.save(sess, save_folder + "saved_models/mnist_auto_final.tfrecords")
         print ("Saved model as: %s" % save_path)
 
 
