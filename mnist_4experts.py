@@ -2,11 +2,12 @@ from tensorflow.examples.tutorials.mnist import input_data
 mnist = input_data.read_data_sets('MNIST_data', one_hot=True)
 
 import tensorflow as tf
+import datetime
 
 sess = tf.InteractiveSession()
 
-x = tf.placeholder(tf.float32, shape=[None, 784])
-y_ = tf.placeholder(tf.float32, shape=[None, 10])
+x = tf.placeholder(tf.float32, shape=[None, 784], name="x")
+y_ = tf.placeholder(tf.float32, shape=[None, 10], name="y_")
 
 def weight_variable(shape):
 	initial = tf.truncated_normal(shape, stddev=0.1)
@@ -43,7 +44,7 @@ b_fc1 = bias_variable([1024])
 h_pool2_flat = tf.reshape(h_pool2, [-1, 7*7*64])
 h_fc1 = tf.nn.relu(tf.matmul(h_pool2_flat, W_fc1) + b_fc1)
 
-keep_prob = tf.placeholder(tf.float32)
+keep_prob = tf.placeholder(tf.float32, name="keep_prob")
 h_fc1_drop = tf.nn.dropout(h_fc1, keep_prob)
 
 W_fc2 = weight_variable([1024, 10])
@@ -54,12 +55,14 @@ y_conv = tf.matmul(h_fc1_drop, W_fc2) + b_fc2
 cross_entropy = tf.reduce_mean(
     tf.nn.softmax_cross_entropy_with_logits(labels=y_, logits=y_conv))
 train_step = tf.train.AdamOptimizer(1e-4).minimize(cross_entropy)
+
 correct_prediction = tf.equal(tf.argmax(y_conv,1), tf.argmax(y_,1))
 accuracy = tf.reduce_mean(tf.cast(correct_prediction, tf.float32))
 
 saver = tf.train.Saver(max_to_keep=10000)
 sess.run(tf.global_variables_initializer())
-for i in range(20000):
+start_time = datetime.datetime.now()
+for i in range(200):
 	batch = mnist.train.next_batch(50)
 	if i%100 == 0:
 		train_accuracy = accuracy.eval(feed_dict={
@@ -67,9 +70,20 @@ for i in range(20000):
 		print("step %d, training accuracy %g"%(i, train_accuracy))
 	train_step.run(feed_dict={x: batch[0], y_: batch[1], keep_prob: 0.5})
 
+print "Total Duration:", datetime.datetime.now() - start_time
+
 save_folder = "4exp/"
+# tf.add_to_collection('x', x)
+# tf.add_to_collection('y_', y_)
+# tf.add_to_collection('keep_prob', keep_prob)
+tf.add_to_collection('train_step', train_step)
+tf.add_to_collection('correct_prediction', correct_prediction)
+tf.add_to_collection('accuracy', accuracy)
 save_path = saver.save(sess, save_folder + "saved_models/mnist_4experts.tfrecords")
 print ("Saved model as: %s" % save_path)
 
 print("test accuracy %g"%accuracy.eval(feed_dict={
-    x: mnist.test.images, y_: mnist.test.labels, keep_prob: 1.0}))
+    x: mnist.test.images[:1000], y_: mnist.test.labels[:1000], keep_prob: 1.0}))
+
+
+
