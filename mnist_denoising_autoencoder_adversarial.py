@@ -16,6 +16,23 @@ def write_to_csv(filename, number):
     with open(filename, 'a') as f:
         f.write(str(number) + ',\n')
 
+def add_noise(images):
+    # images_n = np.copy(images[0])
+    ### gausian
+    n_g = np.random.normal(0, 0.25, images[0].shape)
+    images_n = images[0] + n_g
+    ### salt and pepper
+    n_sp = np.random.uniform(size=images[0].shape)
+    images_n[np.where(n_sp < 0.05)] = 1.0
+    images_n[np.where(n_sp < 0.025)] = 0.0
+    return [images_n]
+
+def saturate_image(images):
+    images_s = np.copy(images[0])
+    images_s[np.where(images_s < 0.5)] = 0.0
+    images_s[np.where(images_s > 0.0)] = 1.0
+    return [images_s]
+
 def show_num_parameters():
     total_parameters = 0
     for variable in tf.trainable_variables():
@@ -40,15 +57,15 @@ def bias_variable(shape):
     initial = tf.constant(0.1, shape=shape)
     return tf.Variable(initial)
 
-def conv2d(x, W):
-    return tf.nn.conv2d(x, W, strides=[1, 1, 1, 1], padding='SAME')
+def conv2d(x, W, stride = 1):
+    return tf.nn.conv2d(x, W, strides=[1, stride, stride, 1], padding='SAME')
 
 def max_pool_2x2(x):
     return tf.nn.max_pool(x, ksize=[1, 2, 2, 1],
                             strides=[1, 2, 2, 1], padding='SAME')
 
-def conv2d_transpose(x, W, out_shape):
-    return tf.nn.conv2d_transpose(x, W, strides=[1, 1, 1, 1],
+def conv2d_transpose(x, W, out_shape, stride = 1):
+    return tf.nn.conv2d_transpose(x, W, strides=[1, stride, stride, 1],
                                     padding='SAME', output_shape=out_shape)
 
 def unpool_2x2(x):
@@ -57,111 +74,86 @@ def unpool_2x2(x):
 
 with tf.Graph().as_default():
 
-    train_iterations = 600000
+    train_iterations = 1000000
     batch_size = 128
 
     x = tf.placeholder(tf.float32, shape=[None, 784])
+    x_n = tf.placeholder(tf.float32, shape=[None, 784])
 
     ####### build the model - auto encoder #############################################
     print "=========================================================================="
-    #### Genorator
     x_image = tf.reshape(x, [-1, 28, 28, 1]) # 28x28
-    print x_image
-    noise = tf.truncated_normal(shape=tf.shape(x_image), stddev=0.25)
-    x_noise = x_image + noise
+    x_noise = tf.reshape(x_n, [-1, 28, 28, 1]) # 28x28
 
-    W_conv1 = weight_variable([5, 5, 1, 16])
-    b_conv1 = bias_variable([16])
-
-    W_conv2 = weight_variable([5, 5, 16, 24])
-    b_conv2 = bias_variable([24])
-
-    W_conv3 = weight_variable([3, 3, 24, 32])
+    W_conv1 = weight_variable([5, 5, 1, 32])
+    b_conv1 = bias_variable([32])
+    W_conv2 = weight_variable([5, 5, 32, 64])
+    b_conv2 = bias_variable([64])
+    W_conv3 = weight_variable([3, 3, 64, 32])
     b_conv3 = bias_variable([32])
+    W_dconv0 = weight_variable([3, 3, 64, 32])
+    b_dconv0 = bias_variable([64])
+    W_dconv1 = weight_variable([5, 5, 32, 64])
+    b_dconv1 = bias_variable([32])
+    W_dconv2 = weight_variable([5, 5, 1, 32])
+    b_dconv2 = bias_variable([1])
+    G_Vars = [W_conv1, b_conv1, W_conv2, b_conv2, W_conv3, b_conv3, 
+                W_dconv0, b_dconv0, W_dconv1, b_dconv1, W_dconv2, b_dconv2]
 
-    W_dconv1 = weight_variable([3, 3, 24, 32])
-    b_dconv1 = bias_variable([24])
+    def auto_encoder(input_image):
+        h_conv1 = tf.nn.relu(conv2d(input_image, W_conv1, 2) + b_conv1, name="conv1")
+        h_conv2 = tf.nn.relu(conv2d(h_conv1, W_conv2,2) + b_conv2, name="conv2")
+        h_conv3 = tf.nn.relu(conv2d(h_conv2, W_conv3) + b_conv3, name="conv3")
 
-    W_dconv2 = weight_variable([5, 5, 16, 24])
-    b_dconv2 = bias_variable([16])
+        osize_dconv0 = h_conv2.get_shape().as_list()
+        osize_dconv0[0] = batch_size
+        h_dconv0 = tf.nn.relu(conv2d_transpose(h_conv3, W_dconv0, osize_dconv0) + b_dconv0, name="dconv0")
+        osize_dconv1 = h_conv1.get_shape().as_list()
+        osize_dconv1[0] = batch_size
+        h_dconv1 = tf.nn.relu(conv2d_transpose(h_dconv0, W_dconv1, osize_dconv1,2) + b_dconv1, name="dconv1")
+        osize_dconv2 = x_image.get_shape().as_list()
+        osize_dconv2[0] = batch_size
+        h_dconv2 = tf.nn.sigmoid(conv2d_transpose(h_dconv1, W_dconv2, osize_dconv2, 2) + b_dconv2, name="dconv2")
+        return h_dconv2
 
-    W_dconv3 = weight_variable([5, 5, 1, 16])
-    b_dconv3 = bias_variable([1])
-
-    G_Vars = [W_conv1, b_conv1, W_conv2, b_conv2, W_conv3, b_conv3,
-                W_dconv1, b_dconv1, W_dconv2, b_dconv2, W_dconv3, b_dconv3]
-
-    def generator(image_input):
-        h_conv1 = tf.nn.relu(conv2d(image_input, W_conv1) + b_conv1, name="conv1")
-        h_pool1 = max_pool_2x2(h_conv1) # 14x14
-
-        h_conv2 = tf.nn.relu(conv2d(h_pool1, W_conv2) + b_conv2, name="conv2")
-        h_pool2 = max_pool_2x2(h_conv2) # 7x7
-        
-        h_conv3 = tf.nn.relu(conv2d(h_pool2, W_conv3) + b_conv3, name="conv3")
-
-        osize_dconv1 = [batch_size, 7, 7, 24]
-        h_dconv1 = tf.nn.relu(conv2d_transpose(h_conv3, W_dconv1, osize_dconv1) + b_dconv1, name="dconv1")
-        
-        h_unpool1 = unpool_2x2(h_dconv1) # 14x14
-        osize_dconv2 = [batch_size, 14, 14, 16]
-        h_dconv2 = tf.nn.relu(conv2d_transpose(h_unpool1, W_dconv2, osize_dconv2) + b_dconv2, name="dconv2")
-        
-        h_unpool2 = unpool_2x2(h_dconv2) # 28x28
-        osize_dconv3 = [batch_size, 28, 28, 1]
-        h_dconv3 = tf.nn.sigmoid(conv2d_transpose(h_unpool2, W_dconv3, osize_dconv3) + b_dconv3, name="dconv3")
-
-        generated_image = h_dconv3
-        return generated_image
-
-    ### Descriminator
-    W_conv1d = weight_variable([5, 5, 1, 16])
-    b_conv1d = bias_variable([16])
-
-    W_conv2d = weight_variable([5, 5, 16, 24])
-    b_conv2d = bias_variable([24])
-
-    W_fc1d = weight_variable([7 * 7 * 24, 256])
-    b_fc1d = bias_variable([256])
-
-    W_fc2d = weight_variable([256, 1])
-    b_fc2d = bias_variable([1])
-
-    D_Vars = [W_conv1d, b_conv1d, W_conv2d, b_conv2d, W_fc1d, b_fc1d, W_fc2d, b_fc2d]
+    W_dc1 = weight_variable([3, 3, 1, 16])
+    b_dc1 = bias_variable([16])
+    W_dc2 = weight_variable([3, 3, 16, 16])
+    b_dc2 = bias_variable([16])
+    W_df1 = weight_variable([7*7*16, 256])
+    b_df1 = bias_variable([256])
+    W_df2 = weight_variable([256, 1])
+    b_df2 = bias_variable([1])
+    D_Vars = [W_dc1, b_dc1, W_dc2, b_dc2, W_df1, b_df1, W_df2, b_df2]
 
     def discriminator(image_input):
-        h_conv1d = tf.nn.relu(conv2d(image_input, W_conv1d) + b_conv1d, name="conv1d")
-        h_pool1d = max_pool_2x2(h_conv1d) # 14x14
+        h_1 = tf.nn.relu(conv2d(image_input, W_dc1, 2) + b_dc1, name="dc1")
+        h_2 = tf.nn.relu(conv2d(h_1, W_dc2, 2) + b_dc2, name="dc2")
+        h_2_flat = tf.reshape(h_2, [-1, 7*7*16])
+        h_3 = tf.nn.relu(tf.matmul(h_2_flat, W_df1) + b_df1, name="df1")
+        h_4 = tf.matmul(h_3, W_df2) + b_df2
+        h_4_sig = tf.nn.sigmoid(h_4, name="df2")
+        return h_4, h_4_sig
 
-        h_conv2d = tf.nn.relu(conv2d(h_pool1d, W_conv2d) + b_conv2d, name="conv2d")
-        h_pool2d = max_pool_2x2(h_conv2d) # 7x7
-        h_pool2d_flat = tf.reshape(h_pool2d, [-1, 7*7*24])
-
-        h_fc1d = tf.nn.relu(tf.matmul(h_pool2d_flat, W_fc1d) + b_fc1d, name="fc1d")
-
-        h_fc2d = (tf.matmul(h_fc1d, W_fc2d) + b_fc2d) # center representation
-
-        how_real = tf.nn.sigmoid(h_fc2d)
-        return how_real, h_fc2d
-
-
-    y_image = generator(x_noise)
-    fake_decision, fake_logit = discriminator(y_image)
-    real_decision, real_logit = discriminator(x_image)
+    y_image = auto_encoder(x_noise)
+    fake_logit, fake_decision = discriminator(y_image)
+    real_logit, real_decision = discriminator(x_image)
 
     show_num_parameters()
 
-    G_l1_loss = tf.reduce_mean(tf.reduce_sum(tf.abs(x_image - y_image), 3))
+    G_L1_loss = tf.reduce_mean(tf.reduce_sum(tf.square(x_image - y_image), 3))
+    G_Ad_loss = tf.reduce_mean(tf.nn.sigmoid_cross_entropy_with_logits(fake_logit, tf.ones_like(fake_logit)))
+    G_loss = G_L1_loss + 0.005 * G_Ad_loss
+
     D_loss_real = tf.reduce_mean(tf.nn.sigmoid_cross_entropy_with_logits(real_logit, tf.ones_like(real_logit)))
     D_loss_fake = tf.reduce_mean(tf.nn.sigmoid_cross_entropy_with_logits(fake_logit, tf.zeros_like(fake_logit)))
     D_loss = D_loss_real + D_loss_fake
-    G_Ad_loss = tf.reduce_mean(tf.nn.sigmoid_cross_entropy_with_logits(fake_logit, tf.ones_like(fake_logit)))
-    G_loss = G_l1_loss# + 0.005 * G_Ad_loss
-
 
     ########################################################################
-    train_step_D = tf.train.AdamOptimizer(1e-6).minimize(D_loss, var_list=D_Vars)
-    train_step_G = tf.train.AdamOptimizer(1e-6).minimize(G_loss, var_list=G_Vars)
+    learning_rate = 1e-6 * 50
+    train_step_G = tf.train.AdamOptimizer(learning_rate).minimize(G_loss, var_list=G_Vars)
+    train_step_G_L1 = tf.train.AdamOptimizer(learning_rate).minimize(G_L1_loss, var_list=G_Vars)
+    train_step_D = tf.train.AdamOptimizer(learning_rate).minimize(D_loss, var_list=D_Vars)
 
     save_folder = "daea_saved/"
 
@@ -181,11 +173,13 @@ with tf.Graph().as_default():
         start_time = datetime.datetime.now()
         for i in range(1, train_iterations + 1):
             batch = mnist.train.next_batch(batch_size)
+            batch_n = add_noise(batch)
+            batch = saturate_image(batch)
 
             if i % 100 == 0 or i == 1:
-                idloss, igloss, igl1, igad, ix_image,ix_noise, iy_image, ifake_decision, ireal_decision = sess.run(
-                    [D_loss, G_loss, G_l1_loss, G_Ad_loss, x_image, x_noise, y_image, fake_decision, real_decision], feed_dict={x:batch[0]})
-                print "step",i, "loss", idloss, igloss, igl1, igad, "duration", datetime.datetime.now() - start_time
+                idloss, igloss, igl1loss, ix_image, ix_noise, iy_image, ifake_decision, ireal_decision = sess.run(
+                        [D_loss, G_loss, G_L1_loss, x_image, x_noise, y_image, fake_decision, real_decision], feed_dict={x:batch[0], x_n:batch_n[0]})
+                print "step",i, "loss", idloss, igloss, igl1loss, "duration", datetime.datetime.now() - start_time
 
                 print "Real Image", np.max(ix_image[0]), np.min(ix_image[0]), \
                         "CNN Image", np.max(iy_image[0]), np.min(iy_image[0]), \
@@ -208,7 +202,10 @@ with tf.Graph().as_default():
             # else:
             #     print i
 
-            _,_, idloss, igloss = sess.run([train_step_D, train_step_G, D_loss, G_loss], feed_dict={x: batch[0]})
+            if i < 100000:
+                _,_, idloss, igloss = sess.run([train_step_D, train_step_G_L1, D_loss, G_loss], feed_dict={x: batch[0], x_n:batch_n[0]})
+            else:
+                _,_, idloss, igloss = sess.run([train_step_D, train_step_G, D_loss, G_loss], feed_dict={x: batch[0], x_n:batch_n[0]})
             to_csv = str(i) + ", " + str(idloss) + ", " + str(igloss)
             write_to_csv('training_losses.csv', to_csv)
 
@@ -222,3 +219,5 @@ with tf.Graph().as_default():
 
 
 print "Ending Program..."
+
+
