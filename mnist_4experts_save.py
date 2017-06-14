@@ -59,9 +59,10 @@ train_step = tf.train.AdamOptimizer(1e-4).minimize(cross_entropy)
 correct_prediction = tf.equal(tf.argmax(y_conv,1), tf.argmax(y_,1))
 accuracy = tf.reduce_mean(tf.cast(correct_prediction, tf.float32))
 
+saver = tf.train.Saver(max_to_keep=10000)
 sess.run(tf.global_variables_initializer())
 start_time = datetime.datetime.now()
-for i in range(20000):
+for i in range(200):
 	batch = mnist.train.next_batch(50)
 	if i%100 == 0:
 		train_accuracy = accuracy.eval(feed_dict={
@@ -71,8 +72,15 @@ for i in range(20000):
 
 print "Total Duration:", datetime.datetime.now() - start_time
 
+save_folder = "4exp/"
+tf.add_to_collection('train_step', train_step)
+tf.add_to_collection('correct_prediction', correct_prediction)
+tf.add_to_collection('accuracy', accuracy)
+save_path = saver.save(sess, save_folder + "saved_models/mnist_4experts.tfrecords")
+print ("Saved model as: %s" % save_path)
+
 print("test accuracy %g"%accuracy.eval(feed_dict={
-    x: mnist.test.images, y_: mnist.test.labels, keep_prob: 1.0}))
+    x: mnist.test.images[:1000], y_: mnist.test.labels[:1000], keep_prob: 1.0}))
 
 
 
