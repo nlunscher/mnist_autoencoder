@@ -1,5 +1,0 @@
-model_checkpoint_path: "400000_mnist_auto.tfrecords"
-all_model_checkpoint_paths: "100000_mnist_auto.tfrecords"
-all_model_checkpoint_paths: "200000_mnist_auto.tfrecords"
-all_model_checkpoint_paths: "300000_mnist_auto.tfrecords"
-all_model_checkpoint_paths: "400000_mnist_auto.tfrecords"
