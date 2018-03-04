@@ -6,9 +6,10 @@ import random
 import os
 
 class Network:
-    def __init__(self, image, im_size, is_train):
+    def __init__(self, image, im_size, num_bb, is_train):
         self.image = image
         self.im_size = im_size
+        self.num_bb = num_bb
         self.is_train = is_train
 
         w1 = tf.Variable(tf.truncated_normal([5,5,1,16], stddev=0.1)) # /2 - 64
@@ -17,11 +18,11 @@ class Network:
         w4 = tf.Variable(tf.truncated_normal([5,5,64,64], stddev=0.1)) # /16 - 8 - bb 48
         w5 = tf.Variable(tf.truncated_normal([5,5,64,64], stddev=0.1)) # /32 - 4 - bb 96
 
-        bb_w1 = tf.Variable(tf.truncated_normal([3,3,64, 3*(2 + 4)], stddev=0.1))
+        bb_w1 = tf.Variable(tf.truncated_normal([3,3,64, self.num_bb*(2 + 4)], stddev=0.1))
         bb_b1 = tf.Variable(tf.constant(0.0, shape=[3*(2 + 4)]))
-        bb_w2 = tf.Variable(tf.truncated_normal([3,3,64, 3*(2 + 4)], stddev=0.1))
+        bb_w2 = tf.Variable(tf.truncated_normal([3,3,64, self.num_bb*(2 + 4)], stddev=0.1))
         bb_b2 = tf.Variable(tf.constant(0.0, shape=[3*(2 + 4)]))
-        bb_w3 = tf.Variable(tf.truncated_normal([3,3,64, 3*(2 + 4)], stddev=0.1))
+        bb_w3 = tf.Variable(tf.truncated_normal([3,3,64, self.num_bb*(2 + 4)], stddev=0.1))
         bb_b3 = tf.Variable(tf.constant(0.0, shape=[3*(2 + 4)]))
 
         h1 = self.conv(self.image, w1, 2, ['bn', 'relu'])
@@ -34,9 +35,9 @@ class Network:
         h_bb2 = self.conv(h4, bb_w2, 1, ['None'], 'VALID') + bb_b2
         h_bb3 = self.conv(h5, bb_w3, 1, ['None'], 'VALID') + bb_b3
 
-        self.output_scale8 = tf.reshape(h_bb1, [-1, 14*14, 3, 2+4])
-        self.output_scale16 = tf.reshape(h_bb2, [-1, 6*6, 3, 2+4])
-        self.output_scale32 = tf.reshape(h_bb3, [-1, 2*2, 3, 2+4])
+        self.output_scale8 = tf.reshape(h_bb1, [-1, 14*14, self.num_bb, 2+4])
+        self.output_scale16 = tf.reshape(h_bb2, [-1, 6*6, self.num_bb, 2+4])
+        self.output_scale32 = tf.reshape(h_bb3, [-1, 2*2, self.num_bb, 2+4])
 
     def conv(self, input_features, weight, stride, options, padding='SAME'):
         h = tf.nn.conv2d(input_features, weight, strides=[1, stride, stride, 1], padding=padding)
@@ -53,7 +54,7 @@ class MNIST_OD_Trainer:
 
         self.im_folder = '/home/nolan/Documents/Data/MNIST_train/8'
         self.files = [os.path.join(r, name) for r,d,f in os.walk(self.im_folder) for name in f if name.endswith(".png")]
-        print(self.files[0])
+        # print(self.files[0])
         print("Number of files: %d" % len(self.files))
 
         self.batch_size = 1
@@ -63,10 +64,20 @@ class MNIST_OD_Trainer:
         self.show_size = (512, 512)
 
         self.bb_size = {8:14, 16:6, 32:2}
-        self.bb_shapes = np.array([[.75, .75], [1., 0.5], [0.5, 1.]])
+        self.bb_shapes = np.array([[.75, .75], 
+                                   [1., 0.5], 
+                                   [0.5, 1.], 
+                                   [1, 1], 
+                                   [0.5, 0.5],
+                                   [0.75, 0.5],
+                                   [0.5, 7.5]])
+        self.num_bb = len(self.bb_shapes)
+        self.default_bb = {}
+        for b in self.bb_size:
+            self.make_default_bb(b)
 
-        self.sub_scale_options = np.arange(0.5, 4, 0.1)
-        self.sub_count = range(5)
+        self.sub_scale_options = np.arange(0.9, 4, 0.1)
+        self.sub_count = range(1,5)
 
     def get_bbox(self, im):
         im_binary = np.ceil(im)
@@ -80,21 +91,51 @@ class MNIST_OD_Trainer:
 
         return [(t_x, t_y), (b_x, b_y)]
 
-    def intersection(self, bbA, bbB):
+    def iou(self, bbA, bbB):
         bb1 = self.bb_center2corner(bbA)
         bb2 = self.bb_center2corner(bbB)
+
+        has_intersection = (    (bb1[0][0] < bb2[1][0] and bb1[0][0] > bb2[0][0] \
+                                or bb2[0][0] < bb1[1][0] and bb2[0][0] > bb1[0][0]) \
+                            and (bb1[0][1] < bb2[1][1] and bb1[0][1] > bb2[0][1] \
+                                or bb2[0][1] < bb1[1][1] and bb2[0][1] > bb1[0][1]))
 
         xA = max(bb1[0][0], bb2[0][0])
         yA = max(bb1[0][1], bb2[0][1])
         xB = min(bb1[1][0], bb2[1][0])
         yB = min(bb1[1][1], bb2[1][1])
 
+        if has_intersection:
+            intersection = (xB - xA) * (yB - yA) #/ min(A1, A2)
+        else:
+            intersection = 0.0
+
         A1 = (bb1[1][0] - bb1[0][0]) * (bb1[1][1] - bb1[0][1])
         A2 = (bb2[1][0] - bb2[0][0]) * (bb2[1][1] - bb2[0][1])
 
-        intersection = (xB - xA + 1e-8) * (yB - yA + 1e-8) / min(A1, A2)
+        IoU = intersection / (A1 + A2 - intersection)
+
+        # if IoU > 1:
+        #     print "*************************HIGH IOU"
+        #     print bbA, bbB
+        #     print bb1, bb2
+        #     print intersection, (A1 + A2 - intersection)
+
+        # new_im = np.zeros((500,500, 3))
+        # print IoU
+        # cv2.rectangle(new_im, (int(bb1[0][0] * new_im.shape[0]), int(bb1[0][1] * new_im.shape[0])), 
+        #                       (int(bb1[1][0] * new_im.shape[0]), int(bb1[1][1] * new_im.shape[0])), 
+        #                       (0,1,0), 2)
+        # cv2.rectangle(new_im, (int(bb2[0][0] * new_im.shape[0]), int(bb2[0][1] * new_im.shape[0])), 
+        #                       (int(bb2[1][0] * new_im.shape[0]), int(bb2[1][1] * new_im.shape[0])), 
+        #                       (0,0,1), 2)
+        # cv2.rectangle(new_im, (int(xA * new_im.shape[0]), int(yA * new_im.shape[0])), 
+        #                       (int(xB * new_im.shape[0]), int(yB * new_im.shape[0])), 
+        #                       (1,0,0), 2)
+        # cv2.imshow("i", new_im)
+        # cv2.waitKey(0)
      
-        return intersection
+        return intersection, IoU
 
     def bb_corner2center(self, bb):
         c_x = np.mean([bb[0][0], bb[1][0]])
@@ -108,7 +149,6 @@ class MNIST_OD_Trainer:
         t_y = np.clip(bb[1] - bb[3]/2, 0, 1)
         b_x = np.clip(bb[0] + bb[2]/2, 0, 1)
         b_y = np.clip(bb[1] + bb[3]/2, 0, 1)
-
         return [(t_x, t_y), (b_x, b_y)]
 
     def add_sub_image(self, im, curr_bbs):
@@ -133,7 +173,8 @@ class MNIST_OD_Trainer:
                 break
 
             for bb in curr_bbs:
-                if self.intersection(new_bb, bb) < 0.2:
+                _, iou = self.iou(new_bb, bb)
+                if iou < 0.2:
                     found_position = True
                 else:
                     found_position = False
@@ -172,82 +213,246 @@ class MNIST_OD_Trainer:
     def get_batch(self):
         im_batch = []
         bb_batch = []
+        enc_bb_batch = []
         for i in range(self.batch_size):
             im, bbs = self.make_image()
 
+            encoded_bbs8 = self.encode_2d_bb(bbs, 8)
+            encoded_bbs16 = self.encode_2d_bb(bbs, 16)
+            encoded_bbs32 = self.encode_2d_bb(bbs, 32)
+
             im_batch.append(im)
             bb_batch.append(bbs)
+            enc_bb_batch.append([encoded_bbs8, encoded_bbs16, encoded_bbs32])
 
-        return np.asarray(im_batch), np.asarray(bb_batch)
+        return np.asarray(im_batch), np.asarray(bb_batch), np.asarray(enc_bb_batch)
 
-    def draw_bb(self, im, bbs, conf):
+    def draw_bb(self, im, bbs, conf, color=(0,1,0)):
         new_im = np.copy(im)
+        # print len(bbs)
         for i in range(len(bbs)):
+            # print(bbs[i])
             bb = self.bb_center2corner(bbs[i])
+            # print bb
             cv2.rectangle(new_im, (int(bb[0][0] * im.shape[0]), int(bb[0][1] * im.shape[1])), 
                                   (int(bb[1][0] * im.shape[0]), int(bb[1][1] * im.shape[1])), 
-                                  (0,1,0), 2)
+                                  color, 2)
             cv2.putText(new_im,'{0:.2f}'.format(conf[i]), 
                                   (int(bb[0][0] * im.shape[0]), int(bb[1][1] * im.shape[1])), 
                         cv2.FONT_HERSHEY_SIMPLEX, 1.2, (0,0,1), 3, cv2.LINE_AA)
         return new_im
 
-    def draw_net_bb(self, im, bb_layer, scale):
-        new_im = np.copy(im)
-        print bb_layer.shape
-        for p in range(bb_layer.shape[0]):
-            for b in range(bb_layer.shape[1]):
-                conf = bb_layer[p, b, 1]
+    # def draw_net_bb(self, im, bb_layer, scale):
+    #     new_im = np.copy(im)
+    #     print bb_layer.shape
+    #     for p in range(bb_layer.shape[0]):
+    #         for b in range(bb_layer.shape[1]):
+    #             conf = bb_layer[p, b, 1]
 
-                if p == 2: # conf > 0.5:
-                    p_xy = (np.asarray([p % self.bb_size[scale]+1, p / self.bb_size[scale]+1], dtype=np.float32) + 0.5) * scale / self.im_size[0]
-                    p_wh = self.bb_shapes[b] * 3. * scale / self.im_size[0]
-                    default_bb = np.empty(4)
-                    default_bb[:2] = p_xy
-                    default_bb[2:] = p_wh
-                    bb_c = default_bb + bb_layer[p, b, 2:6]
-                    bb = self.bb_center2corner(bb_c)
+    #             if p == 2: # conf > 0.5:
+    #                 p_xy = (np.asarray([p % self.bb_size[scale]+1, p / self.bb_size[scale]+1], dtype=np.float32) + 0.5) * scale / self.im_size[0]
+    #                 p_wh = self.bb_shapes[b] * 3. * scale / self.im_size[0]
+    #                 default_bb = np.empty(4)
+    #                 default_bb[:2] = p_xy
+    #                 default_bb[2:] = p_wh
+    #                 bb_c = default_bb + bb_layer[p, b, 2:6]
+    #                 bb = self.bb_center2corner(bb_c)
 
-                    cv2.rectangle(new_im, (int(bb[0][0] * im.shape[0]), int(bb[0][1] * im.shape[1])), 
-                                  (int(bb[1][0] * im.shape[0]), int(bb[1][1] * im.shape[1])), 
-                                  (1,0,0), 2)
-                    cv2.putText(new_im,'{0:.2f}'.format(conf), 
-                                  (int(bb[0][0] * im.shape[0]), int(bb[1][1] * im.shape[1])), 
-                        cv2.FONT_HERSHEY_SIMPLEX, 1.2, (0,0,1), 3, cv2.LINE_AA)
-        return new_im
-
-    def show_images(self):
-        cv2.namedWindow("Image", cv2.WINDOW_NORMAL)
-        cv2.resizeWindow("Image", self.show_size[0]*2, self.show_size[1])
-
-        for i in range(100):
-
-            ims, bbs = self.get_batch()
-
-            image = cv2.cvtColor(cv2.resize(ims[0], self.show_size), cv2.COLOR_GRAY2RGB)
-            conf_gt = np.ones(len(bbs[0]), np.float32)
-            image_gt = self.draw_bb(image, bbs[0], conf_gt)
-            show_im = np.concatenate([image, image_gt], axis=1)
-            cv2.imshow("Image", show_im)
-            cv2.waitKey(1000)
+    #                 cv2.rectangle(new_im, (int(bb[0][0] * im.shape[0]), int(bb[0][1] * im.shape[1])), 
+    #                               (int(bb[1][0] * im.shape[0]), int(bb[1][1] * im.shape[1])), 
+    #                               (1,0,0), 2)
+    #                 cv2.putText(new_im,'{0:.2f}'.format(conf), 
+    #                               (int(bb[0][0] * im.shape[0]), int(bb[1][1] * im.shape[1])), 
+    #                     cv2.FONT_HERSHEY_SIMPLEX, 1.2, (0,0,1), 3, cv2.LINE_AA)
+    #     return new_im
 
     def tf_IoU(self, bb1, bb2):
         pass
 
+    def make_default_bb(self, scale):
+        self.default_bb[scale] = []
+        for b in range(self.num_bb):
+            self.default_bb[scale].append([])
+
+        for p_x in range(self.bb_size[scale]):
+            for p_y in range(self.bb_size[scale]):
+                # print p_x, p_y
+                for b in range(self.num_bb):
+                    p_xy = (np.asarray([p_x + 1, p_y + 1], dtype=np.float32) + 0.5) * scale / self.im_size[0]
+                    # print p_xy
+                    p_wh = self.bb_shapes[b] * 3. * scale / self.im_size[0]
+                    d_bb = np.empty(4)
+                    d_bb[:2] = p_xy
+                    d_bb[2:] = p_wh
+                    self.default_bb[scale][b].append(d_bb) # list of bb coordinates
+
+        # for d in self.default_bb[scale][1]:
+        #     print d
+
+        # print len(self.default_bb[scale][1]), self.bb_size[scale]*self.bb_size[scale]
+
+    def encode_2d_bb(self, gt_bbs, scale):
+        # for scale in self.bb_size:
+        # just 16 for now
+
+        # print
+        # print "================== encode_2d_bb"
+        # print gt_bbs
+
+        num_encoded = 0
+
+        gt = np.zeros([self.bb_size[scale]]*2 + [self.num_bb*(2 + 4)])
+        # print gt.shape
+        for bb in gt_bbs: # for each gt bounding box
+
+            for b in range(self.num_bb): # for each of the 3 aspect ratios
+                for d_bb in self.default_bb[scale][b]: # for each bounding box (each pixel)
+                
+                    _, iou = self.iou(bb, d_bb)
+                    p_x = int(np.round(d_bb[0] * (self.im_size[1] / scale) - 1.5))
+                    p_y = int(np.round(d_bb[1] * (self.im_size[0] / scale) - 1.5))
+                    if iou > 0.5:
+                        num_encoded += 1
+                        # print "over 0.5 "
+                        # print bb
+                        # print p_x, p_y, b, d_bb, iou
+                        r_x = bb[0] - d_bb[0] # regression from default
+                        r_y = bb[1] - d_bb[1]
+                        r_w = bb[2] - d_bb[2]
+                        r_h = bb[3] - d_bb[3]
+                        # print [r_x, r_y, r_w, r_h]
+                        gt[p_y, p_x, b*6 + 1] = 1.0
+                        gt[p_y, p_x, b*6 + 2:b*6 + 6] = [r_x, r_y, r_w, r_h]
+
+
+                        # bb1 = self.bb_center2corner(bb)
+                        # bb2  = self.bb_center2corner(d_bb)
+                        # c_x = r_x + d_bb[0]
+                        # c_y = r_y + d_bb[1]
+                        # c_w = r_w + d_bb[2]
+                        # c_h = r_h + d_bb[3]
+                        # bb3 = self.bb_center2corner([c_x, c_y, c_w, c_h])
+                        # new_im = np.zeros((500,500, 3))
+                        # print scale, iou
+                        # cv2.rectangle(new_im, (int(bb1[0][0] * new_im.shape[0]), int(bb1[0][1] * new_im.shape[0])), 
+                        #                       (int(bb1[1][0] * new_im.shape[0]), int(bb1[1][1] * new_im.shape[0])), 
+                        #                       (0,1,0), 3)
+                        # cv2.rectangle(new_im, (int(bb2[0][0] * new_im.shape[0]), int(bb2[0][1] * new_im.shape[0])), 
+                        #                       (int(bb2[1][0] * new_im.shape[0]), int(bb2[1][1] * new_im.shape[0])), 
+                        #                       (0,0,1), 3)
+                        # cv2.rectangle(new_im, (int(bb3[0][0] * new_im.shape[0]), int(bb3[0][1] * new_im.shape[0])), 
+                        #                       (int(bb3[1][0] * new_im.shape[0]), int(bb3[1][1] * new_im.shape[0])), 
+                        #                       (1,0,0), 1)
+                        # cv2.imshow("i", new_im)
+                        # cv2.waitKey(0)
+
+
+                    else:
+                        gt[p_y, p_x, b*6 + 0] = 1.0 # is class 0 (background)
+
+
+        # print
+        # print gt[:,:,0*6+1]
+        # print gt[:,:,1*6+1]
+        # print gt[:,:,2*6+1]
+        # print num_encoded
+        # print "//================== encode_2d_bb"
+        return gt
+
+    def decode_2d_bb(self, encoded_bb, scale):
+        # print "================== decode_2d_bb"
+
+        # print encoded_bb[:,:,0*6+1]
+        # print encoded_bb[:,:,1*6+1]
+        # print encoded_bb[:,:,2*6+1]
+        # print
+
+        num_dencoded = 0 
+
+        bbs = []
+        confs = []
+        # for x in range(encoded_bb.shape[1]):
+        #     for y in range(encoded_bb.shape[0]):
+        #         for b in range(3):
+        #             if encoded_bb[y, x, b*6 + 1] > 0.5: # class 1 is 0.5 or more
+        #                 [r_x, r_y, r_w, r_h] = encoded_bb[y, x, b*6 + 2:b*6 + 6]
+        #                 c_x = r_x + d_bb[b][0]
+        #                 c_y = r_y + d_bb[b][1]
+        #                 c_w = r_w + d_bb[b][2]
+        #                 c_h = r_h + d_bb[b][3]
+
+        #                 bbs.append([c_x, c_y, c_w, c_h])
+        #                 confs.append(encoded_bb[y, x, b*6 + 1])
+
+        for b in range(self.num_bb):
+            for d_bb in self.default_bb[scale][b]: # for each bounding box (each pixel)
+                
+            
+                x = int(np.round(d_bb[0] * (self.im_size[1] / scale) - 1.5))
+                y = int(np.round(d_bb[1] * (self.im_size[0] / scale) - 1.5))
+                if encoded_bb[y, x, b*6 + 1] > 0.5: # class 1 is 0.5 or more
+                    num_dencoded += 1
+                    [r_x, r_y, r_w, r_h] = encoded_bb[y, x, b*6 + 2:b*6 + 6]
+
+                    c_x = r_x + d_bb[0]
+                    c_y = r_y + d_bb[1]
+                    c_w = r_w + d_bb[2]
+                    c_h = r_h + d_bb[3]
+
+                    # print x, y, b, d_bb
+                    # print [c_x, c_y, c_w, c_h] # [ 0.07578125  0.89375     0.0609375   0.09375   ]
+                    # print [r_x, r_y, r_w, r_h] # [-0.23671875000000001, 0.70625000000000004, -0.22031249999999999, -0.1875]
+
+                    bbs.append([c_x, c_y, c_w, c_h])
+                    confs.append(encoded_bb[y, x, b*6 + 1])
+
+                    # bb2  = self.bb_center2corner(d_bb)
+                    # bb3 = self.bb_center2corner([c_x, c_y, c_w, c_h])
+                    # new_im = np.zeros((500,500, 3))
+                    # print x, y, b, encoded_bb[y, x, b*6 + 1]
+                    # # cv2.rectangle(new_im, (int(bb1[0][0] * new_im.shape[0]), int(bb1[0][1] * new_im.shape[0])), 
+                    # #                       (int(bb1[1][0] * new_im.shape[0]), int(bb1[1][1] * new_im.shape[0])), 
+                    # #                       (0,1,0), 3)
+                    # cv2.rectangle(new_im, (int(bb2[0][0] * new_im.shape[0]), int(bb2[0][1] * new_im.shape[0])), 
+                    #                       (int(bb2[1][0] * new_im.shape[0]), int(bb2[1][1] * new_im.shape[0])), 
+                    #                       (0,0,1), 3)
+                    # cv2.rectangle(new_im, (int(bb3[0][0] * new_im.shape[0]), int(bb3[0][1] * new_im.shape[0])), 
+                    #                       (int(bb3[1][0] * new_im.shape[0]), int(bb3[1][1] * new_im.shape[0])), 
+                    #                       (1,0,0), 1)
+                    # cv2.imshow("i", new_im)
+                    # cv2.waitKey(0)
+
+        # print num_dencoded
+        # print "//================== decode_2d_bb"
+        return bbs, confs
+
+
     def loss(self):
-    """
-        for each bb - get IoU to all gt_bb
-        IoU > 0.5 we call positive
-            backprop classification + bb regression
-        For all other, pick top k where conf loss is high
-            backprop classificaiton
-    """
-    # find the bbox with best IoU and show it
-    # start with just 32
+        """
+            for each bb - get IoU to all gt_bb
+            IoU > 0.5 we call positive
+                backprop classification + bb regression
+            For all other, pick top k where conf loss is high
+                backprop classificaiton
+        """
+        # find the bbox with best IoU and show it
+        # start with just 16
 
+        scale = 32
 
+        for b in range(self.batch_size):
 
-    for i in range(self.output_scale32)
+            logits = []
+            box_regresses = []
+            for p in range(self.output_scale16.shape[1]):
+                for b in range(self.output_scale16.shape[2]):
+                    logits.append(self.output_scale16[p,b, :2])
+                    box_regresses.append(self.output_scale16[p,b, 2:])
+
+                    
+
+            for i in range(len(logits)):
+                pass
 
     def train(self):
 
@@ -266,7 +471,7 @@ class MNIST_OD_Trainer:
         cv2.resizeWindow("Image", self.show_size[0]*3, self.show_size[1])
 
         for i in range(100):
-            ims, bbs = self.get_batch()
+            ims, bbs, enc_bbs = self.get_batch()
 
             os8, os16, os32 = self.sess.run([self.output_scale8, self.output_scale16, self.output_scale32],
                                              feed_dict={self.in_image:ims, self.is_train:True})
@@ -279,11 +484,38 @@ class MNIST_OD_Trainer:
             cv2.imshow("Image", show_im)
             cv2.waitKey(1000)
 
+    def show_images(self):
+        cv2.namedWindow("Image", cv2.WINDOW_NORMAL)
+        cv2.resizeWindow("Image", self.show_size[0]*3, self.show_size[1]*2)
+
+        for i in range(100):
+            ims, bbs, enc_bbs = self.get_batch()
+
+            image = cv2.cvtColor(cv2.resize(ims[0], self.show_size), cv2.COLOR_GRAY2RGB)
+            conf_gt = np.ones(len(bbs[0]), np.float32)
+            image_gt = self.draw_bb(image, bbs[0], conf_gt, (0,1,1))
+
+            decoded8, confs8 = self.decode_2d_bb(enc_bbs[0][0], 8)
+            image_dec0 = self.draw_bb(image, decoded8, confs8)
+            decoded16, confs16 = self.decode_2d_bb(enc_bbs[0][1], 16)
+            image_dec = self.draw_bb(image, decoded16, confs16)
+            decoded32, confs32 = self.decode_2d_bb(enc_bbs[0][2], 32)
+            image_dec2 = self.draw_bb(image, decoded32, confs32)
+            image_dec_total = self.draw_bb(image, decoded8 + decoded16 + decoded32, confs8 + confs16 + confs32, (1,1,0))
+
+            spacer = np.zeros((self.show_size[0], self.show_size[1], 3))
+            show_im = np.concatenate([image, image_gt, image_dec_total, spacer], axis=1)
+            show_im_scales = np.concatenate([spacer, image_dec0, image_dec, image_dec2], axis=1)
+            show_im = np.concatenate([show_im, show_im_scales])
+
+            print i
+            cv2.imshow("Image", show_im)
+            cv2.waitKey(1000)
 
 
 if __name__ == "__main__":
     with tf.Session() as sess:  
         trainer = MNIST_OD_Trainer(sess)
 
-        # trainer.show_images()
-        trainer.train()
+        trainer.show_images()
+        # trainer.train()
